@@ -1,0 +1,13 @@
+{
+  "name": "restaurant-os-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run start:dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "prisma:generate": "npm --prefix backend run prisma:generate",
+    "prisma:db:push": "npm --prefix backend run prisma:db:push",
+    "prisma:seed": "npm --prefix backend run prisma:seed"
+  }
+}
