@@ -1,9 +1,19 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SupabaseService } from '../../common/supabase/supabase.service';
+
+export interface UploadedFileDto {
+  originalname?: string;
+  buffer?: Buffer;
+  mimetype?: string;
+}
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private supabaseService: SupabaseService,
+  ) {}
 
   async findAllByRestaurant(
     restaurantId: string,
@@ -64,7 +74,6 @@ export class ProductsService {
       throw new BadRequestException('Price must be greater than 0');
     }
 
-    // Check SKU uniqueness in restaurant
     const existing = await this.prisma.product.findFirst({
       where: { restaurantId, sku: data.sku, deletedAt: null },
     });
@@ -84,6 +93,32 @@ export class ProductsService {
         status: data.status || 'AVAILABLE',
       },
     });
+  }
+
+  async addProductImage(productId: string, file: UploadedFileDto) {
+    const product = await this.findOne(productId);
+    if (!file) throw new BadRequestException('No image file provided');
+
+    const imageUrl = await this.supabaseService.uploadProductImage(
+      file.originalname || `image_${productId}.jpg`,
+      file.buffer || Buffer.from(''),
+      file.mimetype || 'image/jpeg',
+    );
+
+    const imageCount = await this.prisma.productImage.count({ where: { productId } });
+
+    return this.prisma.productImage.create({
+      data: {
+        productId: product.id,
+        imageUrl,
+        position: imageCount + 1,
+      },
+    });
+  }
+
+  async removeProductImage(productId: string, imageId: string) {
+    await this.findOne(productId);
+    return this.prisma.productImage.delete({ where: { id: imageId } });
   }
 
   async update(id: string, data: any) {

@@ -8,9 +8,12 @@ import {
   Body,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { ProductsService } from './products.service';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ProductsService, UploadedFileDto } from './products.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Products & Menu')
@@ -46,6 +49,28 @@ export class ProductsController {
     @Body() body: any,
   ) {
     const data = await this.productsService.create(restaurantId, body);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Upload product image to Supabase Storage' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  @Post('products/:id/images')
+  async uploadImage(
+    @Param('id') id: string,
+    @UploadedFile() file: UploadedFileDto,
+  ) {
+    const data = await this.productsService.addProductImage(id, file);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Delete product image' })
+  @Delete('products/:productId/images/:imageId')
+  async deleteImage(
+    @Param('productId') productId: string,
+    @Param('imageId') imageId: string,
+  ) {
+    const data = await this.productsService.removeProductImage(productId, imageId);
     return { data };
   }
 

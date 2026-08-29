@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ['CONFIRMED', 'CANCELLED'],
@@ -18,7 +19,10 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private realtimeGateway: RealtimeGateway,
+  ) {}
 
   async findAllByBranch(branchId: string, query: { status?: string; page?: number; limit?: number }) {
     const page = Number(query.page) || 1;
@@ -80,7 +84,6 @@ export class OrdersService {
       throw new BadRequestException('Order must contain at least one product item');
     }
 
-    // Resolve products and build item snapshots
     const productIds = data.items.map((i) => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
@@ -106,7 +109,7 @@ export class OrdersService {
       };
     });
 
-    const total = subtotal; // Tax or discounts can be added here
+    const total = subtotal;
 
     const order = await this.prisma.order.create({
       data: {
@@ -129,13 +132,15 @@ export class OrdersService {
       },
     });
 
-    // Update table status if assigned
     if (data.tableId) {
       await this.prisma.table.update({
         where: { id: data.tableId },
         data: { status: 'OCCUPIED' },
       });
     }
+
+    // Broadcast Realtime Event
+    this.realtimeGateway.emitOrderUpdate(branchId, order);
 
     return order;
   }
@@ -157,9 +162,9 @@ export class OrdersService {
     const updated = await this.prisma.order.update({
       where: { id },
       data: updateData,
+      include: { items: true, table: true },
     });
 
-    // If order completed or cancelled, free table if all active orders closed
     if ((newStatus === 'COMPLETED' || newStatus === 'CANCELLED') && order.tableId) {
       const remainingOrders = await this.prisma.order.count({
         where: {
@@ -175,6 +180,9 @@ export class OrdersService {
         });
       }
     }
+
+    // Broadcast Realtime Event to KDS & POS
+    this.realtimeGateway.emitOrderUpdate(order.branchId, updated);
 
     return updated;
   }
