@@ -6,6 +6,7 @@ import {
   Boxes,
   Truck,
   BarChart3,
+  ShieldCheck,
   Layers,
 } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'inventory', label: 'Inventarios', icon: Boxes },
     { id: 'purchases', label: 'Compras & Proveedores', icon: Truck },
     { id: 'dashboard', label: 'Dashboard & KPI', icon: BarChart3 },
+    { id: 'audit', label: 'Auditoría & Logs', icon: ShieldCheck },
   ];
 
   return (

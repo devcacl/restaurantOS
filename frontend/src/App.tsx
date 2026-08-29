@@ -7,6 +7,7 @@ import { ProductsView } from './views/ProductsView';
 import { InventoryView } from './views/InventoryView';
 import { PurchasesView } from './views/PurchasesView';
 import { DashboardView } from './views/DashboardView';
+import { AuditLogsView } from './views/AuditLogsView';
 
 export function App() {
   const [activeTab, setActiveTab] = useState('pos');
@@ -25,6 +26,7 @@ export function App() {
           {activeTab === 'inventory' && <InventoryView />}
           {activeTab === 'purchases' && <PurchasesView />}
           {activeTab === 'dashboard' && <DashboardView />}
+          {activeTab === 'audit' && <AuditLogsView />}
         </main>
       </div>
     </div>
