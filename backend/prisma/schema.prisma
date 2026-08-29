@@ -5,8 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // 01. RESTAURANTS (Tenant)
@@ -37,24 +38,24 @@ model Restaurant {
 
 // 02. USERS
 model User {
-  id         String    @id @default(uuid())
+  id          String    @id @default(uuid())
   authUserRef String?   @unique
-  email      String    @unique
-  password   String?
-  firstName  String
-  lastName   String
-  phone      String?
-  avatarUrl  String?
-  status     String    @default("ACTIVE") // ACTIVE, INACTIVE
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  deletedAt  DateTime?
+  email       String    @unique
+  password    String?
+  firstName   String
+  lastName    String
+  phone       String?
+  avatarUrl   String?
+  status      String    @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
 
   userRoles          UserRole[]
   branchUsers        BranchUser[]
-  orders             Order[]              @relation("WaiterOrders")
-  inventoryMovements InventoryMovement[]  @relation("CreatedMovements")
-  purchases          Purchase[]           @relation("CreatedPurchases")
+  orders             Order[]             @relation("WaiterOrders")
+  inventoryMovements InventoryMovement[] @relation("CreatedMovements")
+  purchases          Purchase[]          @relation("CreatedPurchases")
   notifications      Notification[]
   auditLogs          AuditLog[]
 
@@ -287,14 +288,14 @@ model OrderItem {
 
 // 16. PAYMENTS
 model Payment {
-  id             String    @id @default(uuid())
+  id             String   @id @default(uuid())
   orderId        String
   amount         Float
-  method         String    @default("CASH") // CASH, CARD, TRANSFER, OTHER
-  status         String    @default("PAID") // PENDING, PAID, FAILED, REFUNDED
+  method         String   @default("CASH") // CASH, CARD, TRANSFER, OTHER
+  status         String   @default("PAID") // PENDING, PAID, FAILED, REFUNDED
   transactionRef String?
-  paidAt         DateTime  @default(now())
-  createdAt      DateTime  @default(now())
+  paidAt         DateTime @default(now())
+  createdAt      DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -322,10 +323,10 @@ model Inventory {
 model InventoryMovement {
   id            String   @id @default(uuid())
   inventoryId   String
-  type          String   // IN, OUT, ADJUSTMENT
+  type          String // IN, OUT, ADJUSTMENT
   quantity      Float
   reason        String?
-  referenceType String?  // ORDER, PURCHASE, MANUAL
+  referenceType String? // ORDER, PURCHASE, MANUAL
   referenceId   String?
   createdBy     String?
   createdAt     DateTime @default(now())
@@ -416,11 +417,11 @@ model AuditLog {
   id           String   @id @default(uuid())
   restaurantId String?
   userId       String?
-  action       String   // CREATE, UPDATE, DELETE, STATUS_CHANGE
-  entity       String   // ORDER, INVENTORY, PRODUCT, etc.
+  action       String // CREATE, UPDATE, DELETE, STATUS_CHANGE
+  entity       String // ORDER, INVENTORY, PRODUCT, etc.
   entityId     String?
-  oldValues    String?  // JSON string
-  newValues    String?  // JSON string
+  oldValues    String? // JSON string
+  newValues    String? // JSON string
   ipAddress    String?
   userAgent    String?
   createdAt    DateTime @default(now())
