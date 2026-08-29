@@ -55,17 +55,44 @@ async function main() {
     });
   }
 
-  // 2. Demo User
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  // 2. Demo Users
+  const adminHash   = await bcrypt.hash('admin123',  10);
+  const waiterHash  = await bcrypt.hash('waiter123', 10);
+  const cookHash    = await bcrypt.hash('cook123',   10);
+
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@restaurantos.com' },
     update: {},
     create: {
       email: 'admin@restaurantos.com',
-      password: passwordHash,
+      password: adminHash,
       firstName: 'Carlos',
       lastName: 'León',
       phone: '+573001234567',
+    },
+  });
+
+  const waiterUser = await prisma.user.upsert({
+    where: { email: 'waiter@restaurantos.com' },
+    update: {},
+    create: {
+      email: 'waiter@restaurantos.com',
+      password: waiterHash,
+      firstName: 'Ana',
+      lastName: 'Torres',
+      phone: '+573009876543',
+    },
+  });
+
+  const cookUser = await prisma.user.upsert({
+    where: { email: 'cook@restaurantos.com' },
+    update: {},
+    create: {
+      email: 'cook@restaurantos.com',
+      password: cookHash,
+      firstName: 'Miguel',
+      lastName: 'Ríos',
+      phone: '+573005551234',
     },
   });
 
@@ -80,13 +107,17 @@ async function main() {
     },
   });
 
-  // Link user to restaurant with OWNER role
-  await prisma.userRole.create({
-    data: {
-      userId: adminUser.id,
-      roleId: ownerRole.id,
-      restaurantId: restaurant.id,
-    },
+  const waiterRole = await prisma.role.findUnique({ where: { name: 'WAITER' } });
+  const cookRole   = await prisma.role.findUnique({ where: { name: 'COOK' } });
+
+  // Link all users to restaurant with their roles
+  await prisma.userRole.createMany({
+    data: [
+      { userId: adminUser.id,  roleId: ownerRole.id,  restaurantId: restaurant.id },
+      { userId: waiterUser.id, roleId: waiterRole.id, restaurantId: restaurant.id },
+      { userId: cookUser.id,   roleId: cookRole.id,   restaurantId: restaurant.id },
+    ],
+    skipDuplicates: true,
   });
 
   // 4. Branch
@@ -101,11 +132,13 @@ async function main() {
     },
   });
 
-  await prisma.branchUser.create({
-    data: {
-      branchId: branch.id,
-      userId: adminUser.id,
-    },
+  await prisma.branchUser.createMany({
+    data: [
+      { branchId: branch.id, userId: adminUser.id },
+      { branchId: branch.id, userId: waiterUser.id },
+      { branchId: branch.id, userId: cookUser.id },
+    ],
+    skipDuplicates: true,
   });
 
   // 5. Dining Tables
@@ -248,7 +281,9 @@ async function main() {
   });
 
   console.log('✅ RestaurantOS Database Seed Completed Successfully!');
-  console.log(`👤 Admin User Credentials -> Email: admin@restaurantos.com | Password: admin123`);
+  console.log(`👑 OWNER  -> admin@restaurantos.com  | admin123`);
+  console.log(`🍽️  WAITER -> waiter@restaurantos.com | waiter123`);
+  console.log(`👨‍🍳 COOK   -> cook@restaurantos.com   | cook123`);
   console.log(`🏪 Restaurant: El Perrazazo Grill & Bar | Branch: Sede Chapinero Central`);
 }
 

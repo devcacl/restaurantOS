@@ -52,15 +52,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     const data = await res.json();
-    // API returns: { accessToken, user: { id, email, firstName, lastName, role, restaurantId } }
+    // API returns: { accessToken, user: { id, email, firstName, lastName, roles[], restaurantId } }
+    const apiUser = data.user || data;
     const userData: User = {
-      id: data.user?.id || data.id,
-      email: data.user?.email || email,
-      firstName: data.user?.firstName || 'Admin',
-      lastName: data.user?.lastName || '',
-      role: data.user?.role || 'OWNER',
-      restaurantId: data.user?.restaurantId || '',
-      branchId: data.user?.branchId,
+      id: apiUser.id,
+      email: apiUser.email || email,
+      firstName: apiUser.firstName || 'User',
+      lastName: apiUser.lastName || '',
+      role: Array.isArray(apiUser.roles) ? apiUser.roles[0] : (apiUser.role || 'OWNER'),
+      restaurantId: apiUser.restaurantId || '',
+      branchId: apiUser.branchId,
       accessToken: data.accessToken,
     };
 
