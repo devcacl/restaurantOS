@@ -94,4 +94,37 @@ export class ProductsController {
     const data = await this.productsService.remove(id);
     return { data };
   }
+
+  // ─── CATEGORIES ENDPOINTS ──────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Get restaurant categories' })
+  @Get('restaurants/:restaurantId/categories')
+  async findAllCategories(@Param('restaurantId') restaurantId: string) {
+    const data = await this.productsService.findAllCategories(restaurantId);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Create category in restaurant' })
+  @Post('restaurants/:restaurantId/categories')
+  async createCategory(
+    @Param('restaurantId') restaurantId: string,
+    @Body() body: any,
+  ) {
+    const data = await this.productsService.createCategory(restaurantId, body);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Update category details' })
+  @Patch('categories/:id')
+  async updateCategory(@Param('id') id: string, @Body() body: any) {
+    const data = await this.productsService.updateCategory(id, body);
+    return { data };
+  }
+
+  @ApiOperation({ summary: 'Delete category' })
+  @Delete('categories/:id')
+  async removeCategory(@Param('id') id: string) {
+    const data = await this.productsService.removeCategory(id);
+    return { data };
+  }
 }

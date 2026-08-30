@@ -1,7 +1,15 @@
-const API_BASE = '/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/v1` : 'http://localhost:3000/api/v1';
 
 export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  const storedUser = localStorage.getItem('restaurantos_user');
+  let token = '';
+  if (storedUser) {
+    try {
+      const parsed = JSON.parse(storedUser);
+      token = parsed.accessToken || '';
+    } catch {}
+  }
+
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

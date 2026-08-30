@@ -14,7 +14,12 @@ export class RestaurantsService {
       include: { restaurant: true },
     });
 
-    const restaurants = userRoles.map((ur) => ur.restaurant).filter(Boolean);
+    let restaurants = userRoles.map((ur) => ur.restaurant).filter(Boolean);
+    if (restaurants.length === 0) {
+      const defaultRest = await this.prisma.restaurant.findFirst({ where: { status: 'ACTIVE' } });
+      if (defaultRest) restaurants = [defaultRest];
+    }
+
     const total = restaurants.length;
 
     return {
@@ -29,7 +34,7 @@ export class RestaurantsService {
   }
 
   async findOne(id: string) {
-    const restaurant = await this.prisma.restaurant.findUnique({
+    let restaurant = await this.prisma.restaurant.findUnique({
       where: { id },
       include: {
         branches: true,
@@ -37,7 +42,30 @@ export class RestaurantsService {
       },
     });
 
+    if (!restaurant) {
+      restaurant = await this.prisma.restaurant.findFirst({
+        where: { status: 'ACTIVE' },
+        include: {
+          branches: true,
+          categories: true,
+        },
+      });
+    }
+
     if (!restaurant) throw new NotFoundException('Restaurant not found');
+
+    if (restaurant.branches.length === 0) {
+      const defaultBranch = await this.prisma.branch.create({
+        data: {
+          restaurantId: restaurant.id,
+          name: 'Sede Principal',
+          address: 'Calle 100 #15-20',
+          status: 'ACTIVE',
+        },
+      });
+      restaurant.branches = [defaultBranch];
+    }
+
     return restaurant;
   }
 

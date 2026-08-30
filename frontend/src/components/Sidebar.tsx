@@ -8,7 +8,9 @@ import {
   BarChart3,
   ShieldCheck,
   Layers,
+  Users,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -16,6 +18,8 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+  const { user } = useAuth();
+
   const navItems = [
     { id: 'pos', label: 'POS & Mesas', icon: Store },
     { id: 'kds', label: 'Cocina (KDS)', icon: ChefHat },
@@ -25,6 +29,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'dashboard', label: 'Dashboard & KPI', icon: BarChart3 },
     { id: 'audit', label: 'Auditoría & Logs', icon: ShieldCheck },
   ];
+
+  // Conditionally show staff management tab for OWNER or ADMIN roles
+  if (user?.role === 'OWNER' || user?.role === 'ADMIN') {
+    navItems.push({ id: 'staff', label: 'Gestión de Personal', icon: Users });
+  }
 
   return (
     <aside className="w-64 border-r border-slate-800/80 bg-slate-950 p-4 flex flex-col justify-between shrink-0">

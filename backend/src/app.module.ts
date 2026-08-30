@@ -14,6 +14,8 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { UsersModule } from './modules/users/users.module';
+import { HealthModule } from './modules/health/health.module';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 
 @Module({
@@ -22,6 +24,7 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     PrismaModule,
     SupabaseModule,
     RealtimeModule,
+    HealthModule,
     AuthModule,
     RestaurantsModule,
     ProductsModule,
@@ -32,6 +35,7 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
     PaymentsModule,
     DashboardModule,
     AuditModule,
+    UsersModule,
   ],
   providers: [
     {

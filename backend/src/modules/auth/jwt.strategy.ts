@@ -14,7 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: {
         userRoles: {
@@ -35,6 +35,51 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('User account inactive or missing');
+    }
+
+    // Auto-assign default OWNER role and Restaurant context if user has no role assigned yet
+    if (user.userRoles.length === 0) {
+      const ownerRole = await this.prisma.role.findUnique({ where: { name: 'OWNER' } });
+      const restaurant = await this.prisma.restaurant.findFirst({ where: { status: 'ACTIVE' } });
+      const branch = await this.prisma.branch.findFirst({ where: { restaurantId: restaurant?.id, status: 'ACTIVE' } });
+
+      if (ownerRole && restaurant) {
+        await this.prisma.userRole.create({
+          data: {
+            userId: user.id,
+            roleId: ownerRole.id,
+            restaurantId: restaurant.id,
+          },
+        });
+        if (branch) {
+          await this.prisma.branchUser.create({
+            data: {
+              userId: user.id,
+              branchId: branch.id,
+            },
+          });
+        }
+        // Re-fetch user with userRoles
+        const refreshed = await this.prisma.user.findUnique({
+          where: { id: user.id },
+          include: {
+            userRoles: {
+              include: {
+                role: {
+                  include: {
+                    rolePermissions: {
+                      include: {
+                        permission: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+        if (refreshed) user = refreshed;
+      }
     }
 
     const roles = user.userRoles.map((ur) => ur.role.name);
@@ -58,3 +103,4 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     };
   }
 }
+

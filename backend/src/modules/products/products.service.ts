@@ -140,4 +140,55 @@ export class ProductsService {
       data: { deletedAt: new Date(), status: 'INACTIVE' },
     });
   }
+
+  // ─── CATEGORIES ──────────────────────────────────────────────────────────
+
+  async findAllCategories(restaurantId: string) {
+    return this.prisma.category.findMany({
+      where: { restaurantId },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createCategory(restaurantId: string, data: any) {
+    if (!data.name) {
+      throw new BadRequestException('Category name is required');
+    }
+    return this.prisma.category.create({
+      data: {
+        restaurantId,
+        name: data.name,
+        description: data.description,
+      },
+    });
+  }
+
+  async updateCategory(id: string, data: any) {
+    const existing = await this.prisma.category.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Category not found');
+
+    return this.prisma.category.update({
+      where: { id },
+      data: {
+        name: data.name,
+        description: data.description,
+      },
+    });
+  }
+
+  async removeCategory(id: string) {
+    const existing = await this.prisma.category.findUnique({
+      where: { id },
+      include: { products: { where: { deletedAt: null } } },
+    });
+    if (!existing) throw new NotFoundException('Category not found');
+
+    if (existing.products.length > 0) {
+      throw new BadRequestException('Cannot delete category because it contains active products');
+    }
+
+    return this.prisma.category.delete({
+      where: { id },
+    });
+  }
 }

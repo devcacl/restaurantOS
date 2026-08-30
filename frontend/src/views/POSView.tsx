@@ -1,28 +1,28 @@
-import React, { useState } from 'react';
-import { Search, Plus, Minus, Trash2, ShoppingBag, Utensils, CheckCircle2, Clock } from 'lucide-react';
-import { Product, DiningTable } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, Minus, Trash2, ShoppingBag, Utensils, CheckCircle2, Clock, Loader2, PlusCircle, AlertCircle } from 'lucide-react';
+import { apiFetch } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
-const MOCK_TABLES: DiningTable[] = [
-  { id: 't1', branchId: 'b1', number: 1, capacity: 2, status: 'AVAILABLE' },
-  { id: 't2', branchId: 'b1', number: 2, capacity: 4, status: 'AVAILABLE' },
-  { id: 't3', branchId: 'b1', number: 3, capacity: 4, status: 'OCCUPIED' },
-  { id: 't4', branchId: 'b1', number: 4, capacity: 6, status: 'AVAILABLE' },
-  { id: 't5', branchId: 'b1', number: 5, capacity: 2, status: 'OCCUPIED' },
-  { id: 't6', branchId: 'b1', number: 6, capacity: 4, status: 'RESERVED' },
-  { id: 't7', branchId: 'b1', number: 7, capacity: 4, status: 'AVAILABLE' },
-  { id: 't8', branchId: 'b1', number: 8, capacity: 8, status: 'AVAILABLE' },
-];
+interface Product {
+  id: string;
+  name: string;
+  sku: string;
+  price: number;
+  description?: string;
+  status: string;
+}
 
-const MOCK_PRODUCTS: Product[] = [
-  { id: 'p1', restaurantId: 'r1', categoryId: 'c1', name: 'Classic Perrazazo Burger', sku: 'BURGER-001', price: 28900, description: '200g carne Angus, queso cheddar fundido, tocineta crocante', minimumStock: 20, status: 'AVAILABLE' },
-  { id: 'p2', restaurantId: 'r1', categoryId: 'c1', name: 'Smoky BBQ Bacon Burger', sku: 'BURGER-002', price: 32900, description: 'Doble tocineta caramelizada, aros de cebolla, salsa BBQ ahumada', minimumStock: 15, status: 'AVAILABLE' },
-  { id: 'p3', restaurantId: 'r1', categoryId: 'c1', name: 'Truffle Mushroom Burger', sku: 'BURGER-003', price: 34900, description: 'Champiñones salteados al vino, queso suizo y alioli de trufa', minimumStock: 10, status: 'AVAILABLE' },
-  { id: 'p4', restaurantId: 'r1', categoryId: 'c2', name: 'Bife de Chorizo Premium 350g', sku: 'STEAK-001', price: 49900, description: 'Corte magro a la parrilla servido con chimichurri casero', minimumStock: 12, status: 'AVAILABLE' },
-  { id: 'p5', restaurantId: 'r1', categoryId: 'c2', name: 'Baby Beef al Carbón 300g', sku: 'STEAK-002', price: 46900, description: 'Tierna carne de res a las brasas con papa rústica', minimumStock: 10, status: 'AVAILABLE' },
-  { id: 'p6', restaurantId: 'r1', categoryId: 'c3', name: 'Papas Rústicas con Trufa', sku: 'SIDE-001', price: 16900, description: 'Papas doradas bañadas en aceite de trufa y queso parmesano', minimumStock: 25, status: 'AVAILABLE' },
-  { id: 'p7', restaurantId: 'r1', categoryId: 'c4', name: 'Limonada de Coco Artesanal', sku: 'DRINK-001', price: 12900, description: 'Refrescante limonada cremosita con leche de coco', minimumStock: 30, status: 'AVAILABLE' },
-  { id: 'p8', restaurantId: 'r1', categoryId: 'c4', name: 'Cerveza IPA Artesanal 500ml', sku: 'DRINK-002', price: 15900, description: 'Cerveza de la casa con notas cítricas y lupuladas', minimumStock: 40, status: 'AVAILABLE' },
-];
+interface DiningTable {
+  id: string;
+  number: number;
+  capacity: number;
+  status: string;
+}
+
+interface Branch {
+  id: string;
+  name: string;
+}
 
 interface CartItem {
   product: Product;
@@ -31,15 +31,138 @@ interface CartItem {
 }
 
 export const POSView: React.FC = () => {
-  const [selectedTable, setSelectedTable] = useState<DiningTable | null>(MOCK_TABLES[2]);
+  const { user } = useAuth();
+  const [tables, setTables] = useState<DiningTable[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [selectedTable, setSelectedTable] = useState<DiningTable | null>(null);
+  
   const [search, setSearch] = useState('');
-  const [cart, setCart] = useState<CartItem[]>([
-    { product: MOCK_PRODUCTS[0], quantity: 2, notes: 'Sin cebolla' },
-    { product: MOCK_PRODUCTS[5], quantity: 1 },
-  ]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [orderNotes, setOrderNotes] = useState('');
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSent, setOrderSent] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Tables creation modal state
+  const [showAddTable, setShowAddTable] = useState(false);
+  const [newTableNum, setNewTableNum] = useState('');
+  const [newTableCap, setNewTableCap] = useState('4');
+
+  const loadInitialContext = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      let restId = user.restaurantId;
+
+      // Fallback: If user.restaurantId is missing, fetch user's accessible restaurants
+      if (!restId) {
+        const userRestRes = await apiFetch<{ data: Array<{ id: string }> }>('/restaurants');
+        const userRestList = userRestRes.data || [];
+        if (userRestList.length > 0) {
+          restId = userRestList[0].id;
+        }
+      }
+
+      if (restId) {
+        const restRes = await apiFetch<{ data: { branches: Branch[] } }>(`/restaurants/${restId}`);
+        const branchList = restRes.data?.branches || [];
+        setBranches(branchList);
+
+        const branchId = user.branchId || branchList[0]?.id || '';
+        if (branchId) {
+          setSelectedBranchId(branchId);
+          await Promise.all([
+            loadTables(branchId),
+            loadProducts(restId)
+          ]);
+        } else {
+          setIsLoading(false);
+        }
+      } else {
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error al inicializar el POS');
+      setIsLoading(false);
+    }
+  };
+
+  const loadTables = async (branchId: string) => {
+    if (!branchId) return;
+    try {
+      const res = await apiFetch<{ data: DiningTable[] }>(`/branches/${branchId}/tables`);
+      const tblList = res.data || [];
+      setTables(tblList);
+      if (tblList.length > 0) {
+        setSelectedTable(tblList[0]);
+      } else {
+        setSelectedTable(null);
+      }
+    } catch (err) {
+      console.error('Error fetching tables:', err);
+    }
+  };
+
+  const loadProducts = async (restId?: string) => {
+    const targetRestId = restId || user?.restaurantId;
+    if (!targetRestId) return;
+    try {
+      const res = await apiFetch<{ data: Product[] }>(`/restaurants/${targetRestId}/products`);
+      setProducts(res.data || []);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadInitialContext();
+  }, [user?.restaurantId, user?.branchId]);
+
+  const handleBranchChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const bId = e.target.value;
+    setSelectedBranchId(bId);
+    if (!bId) return;
+    setIsLoading(true);
+    await loadTables(bId);
+    setIsLoading(false);
+  };
+
+  const handleAddTableSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTableNum) return;
+
+    const targetBranchId = selectedBranchId || user?.branchId || branches[0]?.id;
+    if (!targetBranchId) {
+      setErrorMsg('No hay una sede activa seleccionada para crear la mesa.');
+      return;
+    }
+
+    setErrorMsg('');
+    try {
+      await apiFetch(`/branches/${targetBranchId}/tables`, {
+        method: 'POST',
+        body: JSON.stringify({
+          number: Number(newTableNum),
+          capacity: Number(newTableCap),
+        }),
+      });
+      setShowAddTable(false);
+      setNewTableNum('');
+      await loadTables(targetBranchId);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error al agregar la mesa');
+    }
+  };
 
   const addToCart = (product: Product) => {
+    if (product.status !== 'AVAILABLE') return;
     setCart((prev) => {
       const idx = prev.findIndex((item) => item.product.id === product.id);
       if (idx > -1) {
@@ -65,18 +188,84 @@ export const POSView: React.FC = () => {
     );
   };
 
-  const total = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-
-  const handleSendToKitchen = () => {
-    if (cart.length === 0) return;
-    setOrderSent(true);
-    setTimeout(() => {
-      setOrderSent(false);
-      setCart([]);
-    }, 2000);
+  const updateItemNotes = (productId: string, notes: string) => {
+    setCart((prev) =>
+      prev.map((item) => (item.product.id === productId ? { ...item, notes } : item)),
+    );
   };
 
-  const filteredProducts = MOCK_PRODUCTS.filter(
+  const removeFromCart = (productId: string) => {
+    setCart((prev) => prev.filter((item) => item.product.id !== productId));
+  };
+
+  const total = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+
+  const handleSendToKitchen = async () => {
+    if (cart.length === 0 || !selectedTable) return;
+
+    const targetBranchId = selectedBranchId || user?.branchId || branches[0]?.id;
+    if (!targetBranchId) {
+      setErrorMsg('No hay una sede seleccionada.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMsg('');
+    try {
+      // 1. Send order to backend
+      const orderPayload = {
+        tableId: selectedTable.id,
+        notes: orderNotes,
+        items: cart.map((c) => ({
+          productId: c.product.id,
+          quantity: c.quantity,
+          notes: c.notes || '',
+        })),
+      };
+
+      await apiFetch(`/branches/${targetBranchId}/orders`, {
+        method: 'POST',
+        body: JSON.stringify(orderPayload),
+      });
+
+      // 2. Mark table as OCCUPIED
+      await apiFetch(`/tables/${selectedTable.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'OCCUPIED' }),
+      });
+
+      setOrderSent(true);
+      setCart([]);
+      setOrderNotes('');
+      
+      // Reload tables to show occupied status
+      await loadTables(targetBranchId);
+
+      setTimeout(() => {
+        setOrderSent(false);
+      }, 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Error al enviar el pedido a cocina');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLiberateTable = async (tableId: string) => {
+    if (!window.confirm('¿Liberar mesa y limpiarla?')) return;
+    try {
+      await apiFetch(`/tables/${tableId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'AVAILABLE' }),
+      });
+      await loadTables(selectedBranchId);
+    } catch (err: any) {
+      alert(err.message || 'Error al liberar la mesa');
+    }
+  };
+
+  const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase()),
@@ -86,198 +275,328 @@ export const POSView: React.FC = () => {
     <div className="h-[calc(100vh-4rem)] flex overflow-hidden bg-slate-950">
       {/* Left Column: Tables & Menu Grid */}
       <div className="flex-1 p-6 overflow-y-auto space-y-6">
+        
+        {errorMsg && (
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {/* Floor Plan Tables */}
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
-            <Utensils className="w-4 h-4 text-orange-500" /> Plano de Mesas (Sede Chapinero)
-          </h2>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-            {MOCK_TABLES.map((t) => {
-              const isSelected = selectedTable?.id === t.id;
-              const isOccupied = t.status === 'OCCUPIED';
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTable(t)}
-                  className={`p-3 rounded-xl border text-center transition-all ${
-                    isSelected
-                      ? 'bg-orange-500/20 border-orange-500 text-orange-400 ring-2 ring-orange-500/30'
-                      : isOccupied
-                      ? 'bg-red-500/10 border-red-500/30 text-red-400'
-                      : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
-                  }`}
-                >
-                  <p className="font-bold text-sm">Mesa {t.number}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{t.capacity} Ppersonas</p>
-                  <span
-                    className={`inline-block w-2 h-2 rounded-full mt-1.5 ${
-                      isOccupied ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'
-                    }`}
-                  ></span>
-                </button>
-              );
-            })}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <Utensils className="w-4 h-4 text-orange-500" /> Distribución de Mesas
+            </h2>
+
+            <div className="flex items-center gap-3">
+              {/* Branch select */}
+              <select
+                value={selectedBranchId}
+                onChange={handleBranchChange}
+                className="bg-slate-900 border border-slate-800 rounded-xl px-2 py-1 text-[11px] text-slate-200 focus:outline-none"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => setShowAddTable(true)}
+                className="text-xs font-bold text-orange-400 hover:text-orange-300 flex items-center gap-1"
+              >
+                <PlusCircle className="w-3.5 h-3.5" /> Agregar Mesa
+              </button>
+            </div>
           </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center p-8 text-slate-500 text-xs gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-orange-500" /> Cargando plano de mesas...
+            </div>
+          ) : tables.length === 0 ? (
+            <div className="p-6 rounded-xl border border-dashed border-slate-850 text-center text-xs text-slate-500 italic">
+              No hay mesas configuradas para esta sede. ¡Haz clic en Agregar Mesa para empezar!
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3">
+              {tables.map((t) => {
+                const isSelected = selectedTable?.id === t.id;
+                const isOccupied = t.status === 'OCCUPIED';
+                return (
+                  <div key={t.id} className="relative group">
+                    <button
+                      onClick={() => setSelectedTable(t)}
+                      className={`w-full h-16 rounded-xl border flex flex-col items-center justify-center transition-all duration-150 ${
+                        isSelected
+                          ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/10 text-orange-400 border-orange-500/50 shadow shadow-orange-500/10'
+                          : isOccupied
+                          ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                          : 'bg-slate-900/60 text-slate-300 border-slate-850 hover:bg-slate-900'
+                      }`}
+                    >
+                      <span className="text-xs font-extrabold">Mesa {t.number}</span>
+                      <span className="text-[9px] text-slate-400 mt-0.5">{t.capacity} puestos</span>
+                      <span className={`text-[8px] uppercase tracking-wider font-extrabold mt-1 px-1.5 py-0.2 rounded-full ${
+                        isOccupied ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'
+                      }`}>
+                        {isOccupied ? 'Ocupada' : 'Libre'}
+                      </span>
+                    </button>
+                    {isOccupied && (
+                      <button
+                        onClick={() => handleLiberateTable(t.id)}
+                        className="absolute -top-1.5 -right-1.5 p-1 rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 text-[8px] opacity-0 group-hover:opacity-100 transition duration-150"
+                        title="Liberar mesa"
+                      >
+                        ✔
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Menu Search & Grid */}
-        <div>
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-              Catálogo de Productos
+        {/* Search menu */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <ShoppingBag className="w-4 h-4 text-orange-500" /> Carta & Menú disponible
             </h2>
-            <div className="relative w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <div className="relative max-w-xs flex-1">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Buscar por nombre o SKU..."
+                placeholder="Buscar platillo o bebida..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-orange-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredProducts.map((product) => (
-              <div
-                key={product.id}
-                className="glass-panel rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-slate-100 text-sm">{product.name}</h3>
-                    <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
-                      {product.sku}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">{product.description}</p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between">
-                  <p className="font-extrabold text-orange-400 text-base">
-                    ${product.price.toLocaleString('es-CO')}
-                  </p>
+          {isLoading ? (
+            <div className="flex items-center justify-center p-12 text-slate-500 text-xs gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-500" /> Cargando menú...
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 italic border border-dashed border-slate-850 rounded-xl">
+              No hay productos cargados en el menú. Visita "Menú & Productos" para registrar artículos.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProducts.map((product) => {
+                const isAgotado = product.status !== 'AVAILABLE';
+                return (
                   <button
+                    key={product.id}
+                    disabled={isAgotado}
                     onClick={() => addToCart(product)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs transition shadow-md shadow-orange-500/20"
+                    className={`glass-panel p-4 rounded-2xl border text-left flex flex-col justify-between h-32 transition duration-150 group ${
+                      isAgotado
+                        ? 'border-slate-850/50 bg-slate-950/20 opacity-50 cursor-not-allowed'
+                        : 'border-slate-850 bg-slate-900/40 hover:bg-slate-900 hover:border-slate-700/60'
+                    }`}
                   >
-                    <Plus className="w-3.5 h-3.5" /> Agregar
+                    <div>
+                      <div className="flex items-start justify-between gap-1">
+                        <h3 className="font-extrabold text-xs text-slate-100 group-hover:text-orange-400 transition-colors line-clamp-1">{product.name}</h3>
+                        <span className="text-[10px] bg-slate-950 border border-slate-800 px-1.5 py-0.2 rounded font-mono text-slate-400">{product.sku}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{product.description || 'Sin descripción'}</p>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-850/60">
+                      <span className="font-extrabold text-orange-400 text-sm">${product.price.toLocaleString('es-CO')}</span>
+                      <span className="text-[9px] text-orange-500 font-bold group-hover:translate-x-1 transition duration-150">
+                        {isAgotado ? 'Agotado' : '+ Agregar'}
+                      </span>
+                    </div>
                   </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Right Column: Active Order Cart Sidebar */}
-      <div className="w-96 border-l border-slate-800 bg-slate-900/40 p-5 flex flex-col justify-between shrink-0">
-        <div>
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-            <div>
-              <h2 className="font-bold text-slate-100 text-base flex items-center gap-2">
-                <ShoppingBag className="w-5 h-5 text-orange-500" />
-                {selectedTable ? `Comanda Mesa #${selectedTable.number}` : 'Nueva Comanda'}
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                <Clock className="w-3 h-3 text-orange-400" /> Mesero: Carlos León
-              </p>
-            </div>
-            {cart.length > 0 && (
-              <button
-                onClick={() => setCart([])}
-                className="text-slate-400 hover:text-red-400 text-xs p-1"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+      {/* Right Column: Active Order Cart */}
+      <div className="w-80 border-l border-slate-800/80 bg-slate-900/20 flex flex-col justify-between shrink-0 h-full p-5 space-y-4">
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-850">
+            <h3 className="font-extrabold text-xs text-white uppercase tracking-wider flex items-center gap-1.5">
+              <ShoppingBag className="w-4 h-4 text-orange-500" /> Pedido actual
+            </h3>
+            {selectedTable ? (
+              <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded-full font-extrabold border border-orange-500/30 animate-pulse">
+                Mesa {selectedTable.number}
+              </span>
+            ) : (
+              <span className="text-xs text-slate-500 italic">Mesa no elegida</span>
             )}
           </div>
 
           {/* Cart Items List */}
-          <div className="mt-4 space-y-3 max-h-[calc(100vh-22rem)] overflow-y-auto pr-1">
+          <div className="flex-1 overflow-y-auto mt-4 space-y-3 min-h-0 pr-1">
             {cart.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 text-xs">
-                El carrito está vacío. Selecciona productos del menú.
+              <div className="h-full flex flex-col items-center justify-center text-slate-500 p-4 gap-2">
+                <Utensils className="w-8 h-8 text-slate-600 animate-bounce" />
+                <p className="text-xs italic text-center">El pedido está vacío. Elige productos del menú.</p>
               </div>
             ) : (
               cart.map((item) => (
-                <div
-                  key={item.product.id}
-                  className="bg-slate-900/80 border border-slate-800/80 rounded-xl p-3"
-                >
-                  <div className="flex items-start justify-between">
+                <div key={item.product.id} className="p-3 bg-slate-950/40 border border-slate-850 rounded-xl space-y-2">
+                  <div className="flex items-start justify-between gap-1 text-xs">
                     <div>
-                      <p className="text-xs font-semibold text-slate-200">{item.product.name}</p>
-                      <p className="text-[11px] font-bold text-orange-400 mt-0.5">
-                        ${(item.product.price * item.quantity).toLocaleString('es-CO')}
-                      </p>
+                      <p className="font-extrabold text-slate-200">{item.product.name}</p>
+                      <p className="text-[10px] text-orange-400 font-bold">${item.product.price.toLocaleString('es-CO')}</p>
                     </div>
+                    <button
+                      onClick={() => removeFromCart(item.product.id)}
+                      className="p-1 text-slate-500 hover:text-red-400"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
 
-                    <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
+                  {/* Quantity controls & item notes */}
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-850/60">
+                    <input
+                      type="text"
+                      placeholder="Nota (ej. sin sal...)"
+                      value={item.notes || ''}
+                      onChange={(e) => updateItemNotes(item.product.id, e.target.value)}
+                      className="bg-slate-900 border border-slate-850 rounded px-2 py-0.5 text-[9px] text-slate-300 w-28 focus:outline-none focus:border-orange-500"
+                    />
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => updateQuantity(item.product.id, -1)}
-                        className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-200 text-xs"
+                        className="h-5 w-5 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white"
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
+                      <span className="text-xs font-mono font-bold text-slate-200">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(item.product.id, 1)}
-                        className="w-5 h-5 rounded bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-200 text-xs"
+                        className="h-5 w-5 rounded bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
-
-                  {item.notes && (
-                    <p className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded mt-2">
-                      Nota: {item.notes}
-                    </p>
-                  )}
                 </div>
               ))
             )}
           </div>
         </div>
 
-        {/* Order Totals & Action */}
-        <div className="pt-4 border-t border-slate-800 space-y-3">
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>Subtotal</span>
-            <span>${total.toLocaleString('es-CO')}</span>
-          </div>
-          <div className="flex justify-between text-xs text-slate-400">
-            <span>Impuestos (INC 0%)</span>
-            <span>$0</span>
-          </div>
-          <div className="flex justify-between text-base font-extrabold text-white pt-2 border-t border-slate-800/80">
-            <span>Total a Pagar</span>
-            <span className="text-orange-400">${total.toLocaleString('es-CO')}</span>
+        {/* Action Button & Total */}
+        <div className="pt-4 border-t border-slate-850 space-y-3 bg-slate-950/20">
+          <div className="space-y-1.5">
+            <label className="text-[9px] font-bold text-slate-400 uppercase">Instrucciones de Cocina</label>
+            <input
+              type="text"
+              placeholder="Notas generales (ej. servir rápido)..."
+              value={orderNotes}
+              onChange={(e) => setOrderNotes(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-[11px] text-slate-200 placeholder-slate-500 focus:outline-none"
+            />
           </div>
 
-          <button
-            onClick={handleSendToKitchen}
-            disabled={cart.length === 0 || orderSent}
-            className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg ${
-              orderSent
-                ? 'bg-emerald-600 text-white'
-                : cart.length > 0
-                ? 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white shadow-orange-500/25'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
-          >
-            {orderSent ? (
-              <>
-                <CheckCircle2 className="w-5 h-5" /> Enviado a Cocina!
-              </>
-            ) : (
-              'Enviar Pedido a Cocina (KDS)'
-            )}
-          </button>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total a pagar:</span>
+            <span className="text-lg font-extrabold text-orange-400">${total.toLocaleString('es-CO')}</span>
+          </div>
+
+          {orderSent ? (
+            <div className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center gap-2">
+              <CheckCircle2 className="w-4 h-4" /> ¡Pedido enviado a cocina!
+            </div>
+          ) : (
+            <button
+              onClick={handleSendToKitchen}
+              disabled={cart.length === 0 || !selectedTable || isSubmitting}
+              className="w-full py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-extrabold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-orange-500/10"
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Clock className="w-4 h-4" />
+              )}
+              Enviar Comanda a Cocina
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Add Table Modal */}
+      {showAddTable && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-slate-850 flex items-center justify-between">
+              <h3 className="font-extrabold text-xs text-white uppercase tracking-wider flex items-center gap-1.5">
+                <Utensils className="w-4 h-4 text-orange-500" />
+                Registrar Nueva Mesa
+              </h3>
+              <button
+                onClick={() => setShowAddTable(false)}
+                className="text-xs text-slate-500 hover:text-slate-300 font-bold"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <form onSubmit={handleAddTableSubmit} className="p-4 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Número de Mesa *</label>
+                <input
+                  type="number"
+                  required
+                  value={newTableNum}
+                  onChange={(e) => setNewTableNum(e.target.value)}
+                  placeholder="Ej. 11"
+                  className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase">Capacidad (Comensales) *</label>
+                <select
+                  value={newTableCap}
+                  onChange={(e) => setNewTableCap(e.target.value)}
+                  className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                >
+                  <option value="2">2 personas</option>
+                  <option value="4">4 personas</option>
+                  <option value="6">6 personas</option>
+                  <option value="8">8 personas</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddTable(false)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-800 text-slate-400 hover:text-slate-200 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold shadow-lg shadow-orange-500/20"
+                >
+                  Registrar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -10,6 +10,7 @@ import { InventoryView } from './views/InventoryView';
 import { PurchasesView } from './views/PurchasesView';
 import { DashboardView } from './views/DashboardView';
 import { AuditLogsView } from './views/AuditLogsView';
+import { TeamView } from './views/TeamView';
 import { Loader2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -46,6 +47,7 @@ const AppContent: React.FC = () => {
           {activeTab === 'purchases' && <PurchasesView />}
           {activeTab === 'dashboard' && <DashboardView />}
           {activeTab === 'audit' && <AuditLogsView />}
+          {activeTab === 'staff' && <TeamView />}
         </main>
       </div>
     </div>
